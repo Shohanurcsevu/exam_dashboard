@@ -1,6 +1,6 @@
 // question_importer.js
-// File Version: 1.0.0
-// App Version: 0.0.11
+// File Version: 1.0.1
+// App Version: 0.0.12 (Updated to send lesson_id and topic_id with questions)
 
 const questionImporterModule = (() => {
     const contentArea = document.getElementById('content-area');
@@ -188,6 +188,8 @@ const questionImporterModule = (() => {
         event.preventDefault();
 
         const examId = document.getElementById('import-exam-selector').value;
+        const lessonId = document.getElementById('import-lesson-filter').value; // Get selected lesson ID
+        const topicId = document.getElementById('import-topic-filter').value;   // Get selected topic ID
         const jsonInput = document.getElementById('json-input').value;
 
         if (!examId) {
@@ -211,9 +213,18 @@ const questionImporterModule = (() => {
             return;
         }
 
+        // --- NEW: Add lesson_id and topic_id to each question object in the array ---
+        const questionsWithAssociations = questionsArray.map(question => {
+            return {
+                ...question, // Spread existing question properties
+                lesson_id: lessonId ? parseInt(lessonId, 10) : null, // Add lesson_id if selected, else null
+                topic_id: topicId ? parseInt(topicId, 10) : null   // Add topic_id if selected, else null
+            };
+        });
+
         const payload = {
             exam_id: parseInt(examId, 10),
-            questions: questionsArray
+            questions: questionsWithAssociations // Use the modified array
         };
 
         try {
@@ -226,11 +237,10 @@ const questionImporterModule = (() => {
                 window.showToast(message, 'success');
             }
             document.getElementById('json-input').value = ''; // Clear textarea
-            // Optionally, navigate to the "Add Questions" page to see the new list
-            // Or navigate to the dashboard
-            window.navigateTo('add-questions');
+            window.navigateTo('add-questions'); // Optionally, navigate to the "Add Questions" page to see the new list
         } catch (error) {
             // apiFetch already shows toast
+            console.error('Import API error:', error); // Log the full error for debugging
         }
     };
 

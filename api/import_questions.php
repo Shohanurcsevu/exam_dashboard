@@ -1,7 +1,7 @@
 <?php
 // api/import_questions.php
-// File Version: 1.0.0
-// App Version: 0.0.11
+// File Version: 1.0.4 (Added subject_id saving derived from lesson_id)
+// App Version: 0.0.17
 
 require_once '../utils.php';
 require_once '../database.php';
@@ -46,11 +46,16 @@ if ($request_method === 'POST') {
         sendJsonResponse(['message' => 'Database error during exam ID check.', 'details' => $e->getMessage()], 500);
     }
 
+    // Prepare statement to get subject_id from lesson_id
+    // This assumes that every lesson has a subject_id
+    $getSubjectIdQuery = "SELECT subject_id FROM lessons WHERE id = :lesson_id LIMIT 1";
+    $getSubjectIdStmt = $db->prepare($getSubjectIdQuery);
 
     $db->beginTransaction(); // Start transaction for bulk insert
     try {
-        $insertQuery = "INSERT INTO questions (exam_id, question_text, question_type, options_json, correct_answer, marks)
-                        VALUES (:exam_id, :question_text, :question_type, :options_json, :correct_answer, :marks)";
+        // --- MODIFIED INSERT QUERY: Added topic_id, lesson_id AND subject_id columns ---
+        $insertQuery = "INSERT INTO questions (exam_id, subject_id, topic_id, lesson_id, question_text, question_type, options_json, correct_answer, marks)
+                        VALUES (:exam_id, :subject_id, :topic_id, :lesson_id, :question_text, :question_type, :options_json, :correct_answer, :marks)";
         $stmt = $db->prepare($insertQuery);
 
         foreach ($questionsToImport as $questionData) {
@@ -59,16 +64,38 @@ if ($request_method === 'POST') {
                 $errors[] = "Skipped question due to missing 'question' text.";
                 continue;
             }
-            if (!isset($questionData['answer'])) { // Answer can be empty for SA if marks are 0, but usually needed
+            if (!isset($questionData['answer'])) {
                 $errors[] = "Skipped question '{$questionData['question']}' due to missing 'answer'.";
                 continue;
             }
 
-            // Determine question type based on format (simple heuristic for now)
             $question_type = 'short_answer'; // Default
             $options_json = null;
             $correct_answer_value = htmlspecialchars(strip_tags($questionData['answer']));
             $marks = isset($questionData['marks']) ? (float)$questionData['marks'] : 1.0; // Default marks to 1 if not provided
+
+            $topic_id = isset($questionData['topic_id']) && is_numeric($questionData['topic_id']) ? (int)$questionData['topic_id'] : null;
+            $lesson_id = isset($questionData['lesson_id']) && is_numeric($questionData['lesson_id']) ? (int)$questionData['lesson_id'] : null;
+
+            // --- NEW: Determine subject_id based on lesson_id ---
+            $subject_id = null;
+            if ($lesson_id !== null) {
+                $getSubjectIdStmt->bindParam(':lesson_id', $lesson_id, PDO::PARAM_INT);
+                $getSubjectIdStmt->execute();
+                $result = $getSubjectIdStmt->fetch(PDO::FETCH_ASSOC);
+                if ($result && isset($result['subject_id'])) {
+                    $subject_id = (int)$result['subject_id'];
+                } else {
+                    // Log an error if lesson_id doesn't exist or doesn't have a subject
+                    error_log("Warning: Lesson ID {$lesson_id} not found or has no associated subject_id for question: '{$questionData['question']}'");
+                    // Optionally, you might want to skip the question or add an error for it
+                }
+            }
+            // If you want to allow subject_id to be sent directly in JSON, add this:
+            // if (isset($questionData['subject_id']) && is_numeric($questionData['subject_id'])) {
+            //     $subject_id = (int)$questionData['subject_id'];
+            // }
+
 
             if (isset($questionData['options']) && is_array($questionData['options']) && !empty($questionData['options'])) {
                 $question_type = 'multiple_choice';
@@ -79,15 +106,15 @@ if ($request_method === 'POST') {
                 $options_json = json_encode($formattedOptions);
                 $correct_answer_value = htmlspecialchars(strip_tags($questionData['answer'])); // For MC, answer is the key (A, B, C, D)
             } else if (strtolower($questionData['answer']) === 'true' || strtolower($questionData['answer']) === 'false') {
-                 $question_type = 'true_false';
-                 $correct_answer_value = ucfirst(strtolower($questionData['answer'])); // Normalize to 'True' or 'False'
-                 $options_json = json_encode([['key' => 'True', 'value' => 'True'], ['key' => 'False', 'value' => 'False']]);
+                $question_type = 'true_false';
+                $correct_answer_value = ucfirst(strtolower($questionData['answer'])); // Normalize to 'True' or 'False'
+                $options_json = json_encode([['key' => 'True', 'value' => 'True'], ['key' => 'False', 'value' => 'False']]);
             }
-            // If it has 'options' and 'answer' is 'True'/'False', prioritize multiple choice if options exist.
-            // If it has 'options' and 'answer' is 'A'/'B'/'C'/'D', it's MC.
-            // Otherwise, it's short answer.
 
             $stmt->bindParam(':exam_id', $exam_id, PDO::PARAM_INT);
+            $stmt->bindParam(':subject_id', $subject_id, PDO::PARAM_INT); // --- NEW: Bind subject_id parameter ---
+            $stmt->bindParam(':topic_id', $topic_id, PDO::PARAM_INT);
+            $stmt->bindParam(':lesson_id', $lesson_id, PDO::PARAM_INT);
             $question_text = htmlspecialchars(strip_tags($questionData['question']));
             $stmt->bindParam(':question_text', $question_text);
             $stmt->bindParam(':question_type', $question_type);

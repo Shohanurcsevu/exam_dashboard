@@ -1,26 +1,17 @@
-# api/.htaccess
-# File Version: 1.0.0
-# App Version: 0.0.4
-
+# .htaccess in your /exam_dashboard/api/ directory
 RewriteEngine On
 RewriteBase /exam_dashboard/api/
 
-# Rewrite everything to index.php if you use a single entry point
-# Or, rewrite to the specific PHP file if it exists, otherwise return 404
-# For our current setup with direct API files like dashboard.php, we need to handle specific files.
-# The front-end calls like /api/dashboard. If we want /api/subjects to map to subjects.php
-# then we can use the following.
+# Explicitly rewrite /api/dashboard to dashboard.php
+RewriteRule ^dashboard/?$ dashboard.php [L,QSA]
 
-# If the request is for a file that exists, serve it directly
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
+# General rule for resource names (like /subjects)
+RewriteRule ^([a-zA-Z0-9_-]+)/?$ $1.php [L,QSA]
 
-# Rewrite /api/endpoint_name to endpoint_name.php
-# This rule will handle our direct file mapping
-RewriteRule ^([A-Za-z0-9_-]+)/?$ $1.php [L,QSA]
+# General rule for resource names with an ID (like /subjects/6)
+RewriteRule ^([a-zA-Z0-9_-]+)/([0-9]+)/?$ $1.php/$2 [L,QSA]
 
-# If a specific ID is in the URL, e.g., /api/subjects/123, rewrite to subjects.php?id=123
-# This is a more general rule. For now, our specific API files handle parsing the URL path
-# For example, in subjects.php, we'd parse $_SERVER['REQUEST_URI'] to get the ID.
-# This .htaccess is simple and assumes direct mapping for now.
-# We'll handle complex routing in PHP later.
+# Optional: If you have a single entry point for all API requests (less common for file-based API)
+# RewriteCond %{REQUEST_FILENAME} !-f
+# RewriteCond %{REQUEST_FILENAME} !-d
+# RewriteRule ^(.*)$ index.php [L] # This would redirect all requests to a single index.php handler
