@@ -417,10 +417,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     break;
                 case 'take-exam':
                     // take-exam needs an ID to know which exam to load
-                    if (id === null) {
-                        contentArea.innerHTML = `<div class="text-red-600 text-center p-8">Error: No exam ID provided to take.</div>`;
-                        return; // Stop execution if no ID
-                    }
+                    // if (id === null) {
+                    //     contentArea.innerHTML = `<div class="text-red-600 text-center p-8">Error: No exam ID provided to take.</div>`;
+                    //     return; // Stop execution if no ID
+                    // }
                     if (typeof takeExamModule !== 'undefined' && takeExamModule.loadTakeExamPage) {
                         await takeExamModule.loadTakeExamPage(id); // Pass the ID to the module
                     } else {
